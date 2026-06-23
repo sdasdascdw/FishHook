@@ -5,12 +5,10 @@
 -- 1. Grab the key from the executor
 local userKey = SCRIPT_KEY or _G.SCRIPT_KEY or ""
 
--- Identify the executing software name safely and format with .SRVC extension
-local executorName = identifyexecutor and identifyexecutor() or "Unknown"
-local safeExecutorName = string.gsub(tostring(executorName), "%W", "")
-local LOCK_FILE_NAME = safeExecutorName .. "-Service.SRVC"
+-- Standard fixed name so it never creates separate files if the executor name fluctuates
+local LOCK_FILE_NAME = "FishHook-Service.SRVC"
 
--- Strip everything except alphanumeric characters, hyphens, and underscores
+-- Clean up any hidden formatting from strings
 local function cleanString(str)
     if not str then return "" end
     return tostring(str):gsub("%s+", ""):gsub(";+$", ""):gsub("[\r\n]", "")
@@ -18,7 +16,7 @@ end
 
 userKey = cleanString(userKey)
 
--- Cache-bypass: Adds a random parameter so Roblox doesn't load cached versions of your text file
+-- Cache-bypass: Forces GitHub to fetch the live text file instead of a cached copy
 local cacheBypass = "?t=" .. tostring(math.random(100000, 999999))
 local KEYS_URL = "https://raw.githubusercontent.com/sdasdascdw/FishHook/main/keys.txt" .. cacheBypass
 
@@ -28,7 +26,7 @@ local Scripts = {
 }
 
 --======================================================================================
--- AUTHENTICATION & EXECUTOR WORKSPACE LOCK ENGINE
+-- AUTHENTICATION & SINGLE-USE LOCK ENGINE
 --======================================================================================
 local function authenticateUser()
     local lp = game:GetService("Players").LocalPlayer
@@ -38,7 +36,7 @@ local function authenticateUser()
         return false
     end
 
-    -- Fetch latest text from central keys.txt
+    -- Fetch master keys database from GitHub
     local fetchSuccess, rawContent = pcall(function()
         return game:HttpGet(KEYS_URL)
     end)
@@ -50,7 +48,7 @@ local function authenticateUser()
 
     local keyFound = false
 
-    -- Read line-by-line through your master database keys file
+    -- Verify the key exists on your GitHub lines
     for line in string.gmatch(rawContent, "[^\r\n]+") do
         local cleanLine = cleanString(line)
         if cleanLine ~= "" and cleanLine == userKey then
@@ -59,14 +57,14 @@ local function authenticateUser()
         end
     end
 
-    -- Strict verification guard
+    -- Strict master database verification
     if not keyFound then
         lp:Kick("\n[Access Denied]\nInvalid or Expired Script Key.")
         return false
     end
 
     --======================================================================================
-    -- EXECUTOR WORKSPACE INTERACTION SECURITY LAYER (.SRVC FILE)
+    -- FILE-LOCKING INTEGRITY VERIFICATION
     --======================================================================================
     local fileExists = false
     local pcallFileSuccess, fileCheckResult = pcall(function()
@@ -78,7 +76,7 @@ local function authenticateUser()
     end
 
     if not fileExists then
-        -- File doesn't exist yet: Create the .SRVC lock file and write the key inside
+        -- Key used for the FIRST time on this machine: create the permanent lock profile
         local writeSuccess = pcall(function()
             if writefile then
                 writefile(LOCK_FILE_NAME, userKey)
@@ -86,20 +84,20 @@ local function authenticateUser()
         end)
         
         if not writeSuccess then
-            warn("[Security Warning]: Executor does not support file operations fallback active.")
+            warn("[Security Warning]: Executor does not support standard file handling operations.")
         else
             task.spawn(function()
                 pcall(function()
                     game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = "Service Registered",
-                        Text = "Created service profile: " .. LOCK_FILE_NAME,
+                        Title = "License Key Linked",
+                        Text = "Key successfully tied to this workspace profile.",
                         Duration = 6
                     })
                 end)
             end)
         end
     else
-        -- File exists: Read the internal contents to verify it matches the active key string
+        -- Key has already been initialized previously: load it and check if it matches
         local readSuccess, savedKeyContents = pcall(function()
             if readfile then
                 return readfile(LOCK_FILE_NAME)
@@ -109,13 +107,13 @@ local function authenticateUser()
         if readSuccess and savedKeyContents then
             local cleanSavedKey = cleanString(savedKeyContents)
             
-            -- If the key in the local executor file doesn't match the one being verified
+            -- If the key stored locally inside workspace does not match the key being verified now
             if cleanSavedKey ~= userKey then
                 lp:Kick("\nHWID Mismatched")
                 return false
             end
         else
-            -- If the file is present but unreadable/corrupted, reject access to be safe
+            -- If the file is unreadable or tampered with, deny execution safely
             lp:Kick("\nHWID Mismatched")
             return false
         end
