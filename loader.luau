@@ -2,14 +2,20 @@
 -- FILE: loader.luau
 --======================================================================================
 
--- Look for the key in both global and local variables
+-- 1. Grab the key from the executor
 local userKey = SCRIPT_KEY or _G.SCRIPT_KEY or ""
 
--- Clean up whatever the user entered (remove spaces or semicolons they might copy/paste)
-userKey = string.gsub(userKey, "%s+", ""):gsub(";+$", "")
+-- Strip everything except alphanumeric characters, hyphens, and underscores
+local function cleanString(str)
+    if not str then return "" end
+    return tostring(str):gsub("%s+", ""):gsub(";+$", ""):gsub("[\r\n]", "")
+end
 
--- Your raw keys file URL
-local KEYS_URL = "https://raw.githubusercontent.com/sdasdascdw/FishHook/main/keys.txt"
+userKey = cleanString(userKey)
+
+-- Cache-bypass: Adds a random parameter so Roblox doesn't load an old version of your text file
+local cacheBypass = "?t=" .. tostring(math.random(100000, 999999))
+local KEYS_URL = "https://raw.githubusercontent.com/sdasdascdw/FishHook/main/keys.txt" .. cacheBypass
 
 local Scripts = {
     [7326934954] = "https://raw.githubusercontent.com/sdasdascdw/FishHook/refs/heads/main/FishHook99.luau",
@@ -17,17 +23,17 @@ local Scripts = {
 }
 
 --======================================================================================
--- AUTHENTICATION ENGINE (STRICT MATCHING)
+-- AUTHENTICATION ENGINE
 --======================================================================================
 local function authenticateUser()
     local lp = game:GetService("Players").LocalPlayer
     
     if userKey == "" then
-        lp:Kick("\n[Access Denied]\nNo script key was provided.")
+        lp:Kick("\n[Access Denied]\nNo script key was provided in your executor.")
         return false
     end
 
-    -- Fetch data from keys.txt
+    -- Fetch latest text from keys.txt
     local fetchSuccess, rawContent = pcall(function()
         return game:HttpGet(KEYS_URL)
     end)
@@ -39,21 +45,26 @@ local function authenticateUser()
 
     local keyFound = false
 
+    print("--- [FishHook Key Debugger] ---")
+    print("Key entered in executor: '" .. userKey .. "'")
+
     -- Read line-by-line through your keys file
     for line in string.gmatch(rawContent, "[^\r\n]+") do
-        -- Clean the file line completely (strip spaces, strip trailing semicolons)
-        local cleanLine = string.gsub(line, "%s+", ""):gsub(";+$", "")
+        local cleanLine = cleanString(line)
         
-        -- Since your file ONLY contains keys without a colon separator, match directly!
-        if cleanLine ~= "" and cleanLine == userKey then
-            keyFound = true
-            break
+        if cleanLine ~= "" then
+            print("Checking against file key: '" .. cleanLine .. "'")
+            if cleanLine == userKey then
+                keyFound = true
+                break
+            end
         end
     end
+    print("-------------------------------")
 
     -- Strict verification guard
     if not keyFound then
-        lp:Kick("\n[Access Denied]\nInvalid or Expired Script Key.")
+        lp:Kick("\n[Access Denied]\nInvalid or Expired Script Key.\nCheck your Developer Console (F9) for details.")
         return false
     end
 
