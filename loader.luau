@@ -5,11 +5,10 @@
 -- 1. Grab the key from the executor
 local userKey = SCRIPT_KEY or _G.SCRIPT_KEY or ""
 
--- Identify the executing software name safely
+-- Identify the executing software name safely and format with .SRVC extension
 local executorName = identifyexecutor and identifyexecutor() or "Unknown"
--- Clean up file name paths to be safe for workspace writing
 local safeExecutorName = string.gsub(tostring(executorName), "%W", "")
-local LOCK_FILE_NAME = safeExecutorName .. "-Service.txt"
+local LOCK_FILE_NAME = safeExecutorName .. "-Service.SRVC"
 
 -- Strip everything except alphanumeric characters, hyphens, and underscores
 local function cleanString(str)
@@ -67,7 +66,7 @@ local function authenticateUser()
     end
 
     --======================================================================================
-    -- EXECUTOR WORKSPACE INTERACTION SECURITY LAYER
+    -- EXECUTOR WORKSPACE INTERACTION SECURITY LAYER (.SRVC FILE)
     --======================================================================================
     local fileExists = false
     local pcallFileSuccess, fileCheckResult = pcall(function()
@@ -79,7 +78,7 @@ local function authenticateUser()
     end
 
     if not fileExists then
-        -- File doesn't exist yet: Generate the workspace tie-in lock file
+        -- File doesn't exist yet: Create the .SRVC lock file and write the key inside
         local writeSuccess = pcall(function()
             if writefile then
                 writefile(LOCK_FILE_NAME, userKey)
@@ -92,8 +91,8 @@ local function authenticateUser()
             task.spawn(function()
                 pcall(function()
                     game:GetService("StarterGui"):SetCore("SendNotification", {
-                        Title = "Service Initialized",
-                        Text = "Created workspace lock for " .. executorName,
+                        Title = "Service Registered",
+                        Text = "Created service profile: " .. LOCK_FILE_NAME,
                         Duration = 6
                     })
                 end)
