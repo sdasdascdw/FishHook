@@ -1,13 +1,14 @@
 --======================================================================================
--- FILE: FishHook_Secure_Launcher.lua
+-- FILE: loader.luau
 --======================================================================================
 
--- Ensure the script checks both global and local environments for the player's key
+-- Look for the key in both global and local variables
 local userKey = SCRIPT_KEY or _G.SCRIPT_KEY or ""
--- Clean up the key entered by the user (remove trailing semicolon or spaces just in case)
+
+-- Clean up whatever the user entered (remove spaces or semicolons they might copy/paste)
 userKey = string.gsub(userKey, "%s+", ""):gsub(";+$", "")
 
--- Raw GitHub URL for parsing plain text lines
+-- Your raw keys file URL
 local KEYS_URL = "https://raw.githubusercontent.com/sdasdascdw/FishHook/main/keys.txt"
 
 local Scripts = {
@@ -16,25 +17,7 @@ local Scripts = {
 }
 
 --======================================================================================
--- SYSTEM HARDWARE IDENTITY (HWID) DETECTOR
---======================================================================================
-local function getHWID()
-    local success, result = pcall(function()
-        return cloneref(game:GetService("RbxAnalyticsService")):GetClientId() 
-            or game:GetService("RbxAnalyticsService"):GetClientId()
-    end)
-    
-    if success and result then 
-        return tostring(result):gsub("%W", ""):lower() 
-    end
-    
-    return tostring(game:GetService("Players").LocalPlayer.UserId)
-end
-
-local userHWID = getHWID()
-
---======================================================================================
--- SERVER AUTHENTICATION SYSTEM
+-- AUTHENTICATION ENGINE (STRICT MATCHING)
 --======================================================================================
 local function authenticateUser()
     local lp = game:GetService("Players").LocalPlayer
@@ -44,74 +27,41 @@ local function authenticateUser()
         return false
     end
 
-    -- Fetch text stream from keys.txt
+    -- Fetch data from keys.txt
     local fetchSuccess, rawContent = pcall(function()
         return game:HttpGet(KEYS_URL)
     end)
 
     if not fetchSuccess or not rawContent then
-        lp:Kick("\n[Authentication Error]\nFailed to connect to authorization server.")
+        lp:Kick("\n[Authentication Error]\nFailed to connect to verification server.")
         return false
     end
 
     local keyFound = false
-    local hwidMatched = false
-    local needHwidWhitelisting = false
 
-    -- Line-by-Line Split Layer
+    -- Read line-by-line through your keys file
     for line in string.gmatch(rawContent, "[^\r\n]+") do
-        -- Strip spaces and trailing semicolons safely from the file line
+        -- Clean the file line completely (strip spaces, strip trailing semicolons)
         local cleanLine = string.gsub(line, "%s+", ""):gsub(";+$", "")
         
-        if cleanLine ~= "" then
-            -- Check if line has a colon separating Key and HWID
-            local entryKey, entryHWID = string.match(cleanLine, "([^:]+):?([^:]*)")
-            entryKey = entryKey or cleanLine
-            entryHWID = entryHWID or ""
-
-            if entryKey == userKey then
-                keyFound = true
-                
-                -- If there's no colon or no HWID attached yet, whitelist this current machine
-                if entryHWID == "" then
-                    needHwidWhitelisting = true
-                    hwidMatched = true
-                    break
-                elseif entryHWID:gsub("%W", ""):lower() == userHWID then
-                    hwidMatched = true
-                    break
-                end
-            end
+        -- Since your file ONLY contains keys without a colon separator, match directly!
+        if cleanLine ~= "" and cleanLine == userKey then
+            keyFound = true
+            break
         end
     end
 
-    -- Strict Execution Validation Guards
+    -- Strict verification guard
     if not keyFound then
         lp:Kick("\n[Access Denied]\nInvalid or Expired Script Key.")
         return false
-    elseif not hwidMatched then
-        lp:Kick("\nHWID Incorrect")
-        return false
-    end
-
-    -- Informational alert letting them know their key is now locked to their device
-    if needHwidWhitelisting then
-        task.spawn(function()
-            pcall(function()
-                game:GetService("StarterGui"):SetCore("SendNotification", {
-                    Title = "HWID Linked!",
-                    Text = "Your hardware ID has been locked to this key.",
-                    Duration = 8
-                })
-            end)
-        end)
     end
 
     return true
 end
 
 --======================================================================================
--- RUNTIME DISTRIBUTION
+-- INITIALIZE GAME DETECTION
 --======================================================================================
 if authenticateUser() then
     local Script = Scripts[game.GameId]
@@ -119,6 +69,6 @@ if authenticateUser() then
     if Script then
         loadstring(game:HttpGet(Script))()
     else
-        warn("This game environment is not currently supported.")
+        warn("This game instance ID (" .. tostring(game.GameId) .. ") is not supported.")
     end
 end
